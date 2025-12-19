@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Startup, Idea, Phase, Milestone
+from .models import Startup, Idea, Phase, Milestone, Meeting
 from users.serializers import UserSerializer
 
 class PhaseSerializer(serializers.ModelSerializer):
@@ -36,3 +36,10 @@ class IdeaSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['owner'] = self.context['request'].user
         return super().create(validated_data)
+class MeetingSerializer(serializers.ModelSerializer):
+    startup_details = StartupSerializer(source='startup', read_only=True)
+    mentor_details = UserSerializer(source='mentor', read_only=True)
+
+    class Meta:
+        model = Meeting
+        fields = ['id', 'startup', 'mentor', 'startup_details', 'mentor_details', 'title', 'description', 'schedule_date', 'link']

@@ -88,3 +88,10 @@ class Milestone(models.Model):
     
     def __str__(self):
         return f"{self.startup.name} - {self.title}"
+class Meeting(models.Model):
+    startup = models.ForeignKey(Startup, on_delete=models.CASCADE, related_name='meetings')
+    mentor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='meetings')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    schedule_date = models.DateTimeField(auto_now_add=True)
+    link = models.URLField(blank=True)
