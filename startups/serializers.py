@@ -30,7 +30,7 @@ class IdeaSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Idea
-        fields = ['id', 'title', 'description', 'owner', 'owner_details', 'status', 'created_at', 'startup']
+        fields = '__all__'
         read_only_fields = ['owner', 'created_at', 'status', 'startup']
 
     def create(self, validated_data):
