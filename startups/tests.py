@@ -2,7 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from django.contrib.auth import get_user_model
-from .models import Startup, Meeting
+from .models import Startup, Meeting, Idea
 
 User = get_user_model()
 
@@ -91,3 +91,30 @@ class MeetingTests(APITestCase):
         meeting.refresh_from_db()
         self.assertEqual(meeting.title, 'Updated Title')
 
+
+class IdeaTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='user', password='password123')
+        self.admin = User.objects.create_superuser(username='admin', email='admin@test.com', password='password123')
+        
+        self.idea = Idea.objects.create(
+            title="Test Idea",
+            description="Test Description",
+            owner=self.user
+        )
+
+    def test_admin_can_approve_idea(self):
+        self.client.force_authenticate(user=self.admin)
+        url = f'/api/ideas/{self.idea.id}/approve/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.idea.refresh_from_db()
+        self.assertEqual(self.idea.status, 'approved')
+
+    def test_non_admin_cannot_approve_idea(self):
+        self.client.force_authenticate(user=self.user)
+        url = f'/api/ideas/{self.idea.id}/approve/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.idea.refresh_from_db()
+        self.assertNotEqual(self.idea.status, 'approved')
