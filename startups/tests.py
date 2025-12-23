@@ -110,6 +110,10 @@ class IdeaTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.idea.refresh_from_db()
         self.assertEqual(self.idea.status, 'approved')
+        
+        # Verify startup creation
+        self.assertTrue(Startup.objects.filter(name="Test Idea", founder=self.user).exists())
+        self.assertIsNotNone(self.idea.startup)
 
     def test_non_admin_cannot_approve_idea(self):
         self.client.force_authenticate(user=self.user)

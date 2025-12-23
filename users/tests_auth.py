@@ -59,3 +59,23 @@ class AuthTests(APITestCase):
         url = reverse('schema-swagger-ui')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+class AdminSignupTests(APITestCase):
+    def test_signup_as_admin_role_does_not_grant_staff_permissions_by_default(self):
+        url = reverse('register') # Assuming 'register' is the name, need to check users/urls.py
+        data = {
+            'username': 'candidate_admin',
+            'email': 'admin@example.com',
+            'password': 'password123',
+            'profile': {
+                'role': 'admin'
+            }
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        user = User.objects.get(username='candidate_admin')
+        self.assertEqual(user.profile.role, 'admin')
+        # Expecting this to be False currently
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)

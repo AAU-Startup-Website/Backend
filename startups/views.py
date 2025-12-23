@@ -27,7 +27,18 @@ class IdeaViewSet(viewsets.ModelViewSet):
         idea = self.get_object()
         idea.status = 'approved'
         idea.save()
-        return Response({'status': 'idea approved'})
+        
+
+        if not hasattr(idea, 'startup') or idea.startup is None:
+            startup = Startup.objects.create(
+                name=idea.title,
+                description=idea.description,
+                founder=idea.owner
+            )
+            idea.startup = startup
+            idea.save()
+            
+        return Response({'status': 'idea approved', 'startup_id': idea.startup.id})
 
 class PhaseViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Phase.objects.all()
