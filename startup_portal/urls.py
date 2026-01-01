@@ -27,9 +27,9 @@ urlpatterns = [
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 ]
 
-# def health_check(request):
-#     return JsonResponse({"status": "ok"})
+def health_check(request):
+    return JsonResponse({"status": "ok"})
 
-# urlpatterns = [
-#     path("", health_check),
-# ]
+urlpatterns = [
+    path("", health_check),
+]
