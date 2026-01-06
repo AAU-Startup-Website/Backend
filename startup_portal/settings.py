@@ -47,6 +47,7 @@ DEBUG = os.getenv('DEBUG') == 'True'
 
 ALLOWED_HOSTS = [
      "backend-osjx.onrender.com",
+     "aau-startup-backend.onrender.com"
 ]
 
 
