@@ -45,11 +45,12 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = [
-     "backend-osjx.onrender.com",
-     "aau-startup-backend.onrender.com"
-]
+#ALLOWED_HOSTS = [
+#     "backend-osjx.onrender.com",
+#    "aau-startup-backend.onrender.com"
+#]
 
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
