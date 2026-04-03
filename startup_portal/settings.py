@@ -50,7 +50,7 @@ DEBUG = os.getenv('DEBUG') == 'True'
 #    "aau-startup-backend.onrender.com"
 #]
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'http://10.5.10.31:8080/','https://10.5.10.31:8080/','localhost,127.0.0.1').split(',')
 
 # Application definition
 
