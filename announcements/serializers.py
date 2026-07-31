@@ -1,7 +1,12 @@
-from rest_framework import serializers
 from .models import Announcement
+from startup_portal.serializers import StrictModelSerializer
 
-class AnnouncementSerializer(serializers.ModelSerializer):
+
+class AnnouncementSerializer(StrictModelSerializer):
     class Meta:
         model = Announcement
-        fields = '__all__'
+        fields = [
+            'id', 'title', 'content', 'type', 'category',
+            'is_pinned', 'author', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
