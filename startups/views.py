@@ -1,9 +1,11 @@
 from rest_framework import viewsets, permissions, status, generics, exceptions
+from django.db import transaction
 from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Startup, Idea, Phase, Milestone, Meeting
 from .serializers import StartupSerializer, IdeaSerializer, PhaseSerializer, MilestoneSerializer, MeetingSerializer
+from audit.utils import log_action
 
 
 class StartupViewSet(viewsets.ModelViewSet):
@@ -25,19 +27,40 @@ class IdeaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def approve(self, request, pk=None):
         idea = self.get_object()
-        idea.status = 'approved'
-        idea.save()
-        
 
-        if not hasattr(idea, 'startup') or idea.startup is None:
-            startup = Startup.objects.create(
-                name=idea.title,
-                description=idea.description,
-                founder=idea.owner
+        if idea.status == 'approved':
+            # Idempotency guard: re-approving an already-approved idea is a
+            # documented no-op, not a silent re-approval that could re-run
+            # side effects or mask a stale client state.
+            return Response(
+                {
+                    'status': 'idea already approved',
+                    'startup_id': idea.startup.id if idea.startup else None,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            idea.startup = startup
+
+        with transaction.atomic():
+            idea.status = 'approved'
             idea.save()
-            
+
+            if not hasattr(idea, 'startup') or idea.startup is None:
+                startup = Startup.objects.create(
+                    name=idea.title,
+                    description=idea.description,
+                    founder=idea.owner
+                )
+                idea.startup = startup
+                idea.save()
+
+        log_action(
+            request.user,
+            action='idea.approve',
+            target_type='Idea',
+            target_id=idea.id,
+            idea_title=idea.title,
+            startup_id=idea.startup.id,
+        )
         return Response({'status': 'idea approved', 'startup_id': idea.startup.id})
 
 class PhaseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -67,17 +90,16 @@ class MeetingListCreateView(generics.ListCreateAPIView):
         serializer.save()
 
 class MeetingRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Meeting.objects.all()
     serializer_class = MeetingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_object(self):
-        obj = super().get_object()
+    def get_queryset(self):
+        # Scoping the queryset itself (rather than fetching unfiltered and
+        # manually raising PermissionDenied) means an out-of-scope meeting ID
+        # returns a plain 404 — identical to a nonexistent ID — instead of a
+        # 403 that confirms the meeting exists but isn't visible to this user.
         user = self.request.user
-        # Check if user is the mentor OR the founder
-        if obj.mentor != user and obj.startup.founder != user:
-            raise exceptions.PermissionDenied("You do not have permission to view or edit this meeting.")
-        return obj
+        return Meeting.objects.filter(Q(mentor=user) | Q(startup__founder=user))
 
 
 

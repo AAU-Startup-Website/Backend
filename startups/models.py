@@ -1,5 +1,9 @@
 from django.db import models
 from django.conf import settings
+from django.core.validators import FileExtensionValidator
+from .validators import validate_file_size
+
+ALLOWED_PITCH_DECK_EXTENSIONS = ['pdf', 'ppt', 'pptx', 'doc', 'docx']
 
 class Phase(models.Model):
     name = models.CharField(max_length=100)
@@ -63,7 +67,15 @@ class Idea(models.Model):
     key_challenges = models.TextField(blank=True, default='')
     development_timeline = models.TextField(blank=True, default='')
     
-    pitch_deck = models.FileField(upload_to='idea_pitches/', null=True, blank=True)
+    pitch_deck = models.FileField(
+        upload_to='idea_pitches/',
+        null=True,
+        blank=True,
+        validators=[
+            FileExtensionValidator(allowed_extensions=ALLOWED_PITCH_DECK_EXTENSIONS),
+            validate_file_size,
+        ],
+    )
 
 
 

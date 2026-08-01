@@ -16,6 +16,12 @@ from dotenv import load_dotenv
 from urllib.parse import urlparse, parse_qsl
 from rest_framework.permissions import AllowAny
 
+
+def _split_env_list(name, default=''):
+    """Parse a comma-separated environment variable into a list, dropping blanks."""
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(',') if item.strip()]
+
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
         'Bearer': {
@@ -38,19 +44,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG') == 'True'
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 #ALLOWED_HOSTS = [
 #     "backend-osjx.onrender.com",
 #    "aau-startup-backend.onrender.com"
 #]
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'http://10.5.10.31:8080/','https://10.5.10.31:8080/','localhost,127.0.0.1').split(',')
+allowed_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
 
 # Application definition
 
@@ -67,6 +72,9 @@ INSTALLED_APPS = [
     'users',
     'startups',
     'drf_yasg',
+    'announcements',
+    'operations',
+    'audit',
 ]
 
 MIDDLEWARE = [
@@ -116,19 +124,29 @@ WSGI_APPLICATION = 'startup_portal.wsgi.application'
 #     }
 # }
 
-tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
+database_url = os.getenv('DATABASE_URL', '')
+use_sqlite = os.getenv('USE_SQLITE', 'True').lower() == 'true'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': tmpPostgres.path.replace('/', ''),
-        'USER': tmpPostgres.username,
-        'PASSWORD': tmpPostgres.password,
-        'HOST': tmpPostgres.hostname,
-        'PORT': 5432,
-        'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
+if database_url and not use_sqlite:
+    tmpPostgres = urlparse(database_url)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': tmpPostgres.path.replace('/', ''),
+            'USER': tmpPostgres.username,
+            'PASSWORD': tmpPostgres.password,
+            'HOST': tmpPostgres.hostname,
+            'PORT': tmpPostgres.port or 5432,
+            'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -177,9 +195,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
-# CORS Settings
+# CORS Settings — explicit allow-list, never a wildcard outside DEBUG.
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all in development
-CORS_ALLOWED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if not DEBUG else []
+CORS_ALLOWED_ORIGINS = _split_env_list(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:3000,http://localhost:3001' if DEBUG else ''
+)
+
+from .settings_checks import validate_production_network_settings
+
+validate_production_network_settings(DEBUG, ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS)
 
 # Security Settings (Production)
 if not DEBUG:
@@ -214,7 +239,33 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        # Per-IP request rate on the login endpoint (see users/throttles.py).
+        'login': os.getenv('LOGIN_THROTTLE_RATE', '10/min'),
+    },
 }
+
+# Per-username progressive lockout on login (used by CustomAuthToken).
+LOGIN_MAX_FAILED_ATTEMPTS = int(os.getenv('LOGIN_MAX_FAILED_ATTEMPTS', '5'))
+LOGIN_LOCKOUT_SECONDS = int(os.getenv('LOGIN_LOCKOUT_SECONDS', '300'))
+
+# Cache backend used for the login lockout counters above. LocMemCache is
+# fine for a single-process deployment/tests; point at a shared cache
+# (e.g. Redis/Memcached) for multi-worker production.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
+# Frontend origin used to build password-reset links. Defaults to the local
+# Next.js dev server; must be set to the real deployed frontend domain in
+# production via the FRONTEND_URL environment variable.
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000').rstrip('/')
+
+# Password-reset uid/token pair expiry, in seconds. Explicit rather than
+# relying on Django's implicit 3-day (259200s) default. 259200 = 3 days.
+PASSWORD_RESET_TIMEOUT = int(os.getenv('PASSWORD_RESET_TIMEOUT', '259200'))
 
 # Email Configuration
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
@@ -224,30 +275,36 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 
-# Logging
+# Structured (JSON) application logging. Covers request-level Django/DRF
+# logging plus the login-lockout warnings emitted from users/views.py
+# (users.auth logger), which include username/ip/event fields per attempt.
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+        'json': {
+            '()': 'startup_portal.logging_formatters.JSONFormatter',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'json',
         },
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO',
+        'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
     },
     'loggers': {
         'django': {
             'handlers': ['console'],
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'users.auth': {
+            'handlers': ['console'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

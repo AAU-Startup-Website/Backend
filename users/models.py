@@ -8,6 +8,7 @@ class Profile(models.Model):
     ROLE_CHOICES = [
         ('student', 'Student'),
         ('mentor', 'Mentor'),
+        ('investor', 'Investor'),
         ('admin', 'Admin'),
     ]
     

@@ -48,13 +48,20 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         
         if profile_data:
+            # `role` is intentionally excluded from self-service profile updates.
+            # Allowing it here would let any authenticated user grant themselves
+            # the 'admin' profile role (and with it, announcement write access)
+            # via PATCH /api/users/profile/. Role changes must go through Django
+            # admin (see users/admin.py) or a future dedicated admin-only endpoint.
+            profile_data.pop('role', None)
+
             if hasattr(instance, 'profile'):
                 for attr, value in profile_data.items():
                     setattr(instance.profile, attr, value)
                 instance.profile.save()
             else:
                 Profile.objects.create(user=instance, **profile_data)
-            
+
         return instance
 
 class PasswordResetSerializer(serializers.Serializer):
